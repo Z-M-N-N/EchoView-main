@@ -1,112 +1,153 @@
-# EchoView — 超声心动图多任务智能诊断系统
+# Echo-View: Visual Domain Adaptation and Task-guided Multi-view Routing for Echocardiographic Diagnosis
 
-基于多模态大语言模型（Qwen2.5-VL）与多专家路由（MoE）的超声影像智能诊断框架，完整覆盖 **数据构建 → 视觉多任务训练 → VLM 微调 → MoE 路由 → 对比评估** 全流程。
+Echo-View is a **two-stage vision-language framework** for structured echocardiographic diagnosis. Through **visual domain adaptation** and **task-guided multi-view routing**, the model dynamically selects the most appropriate combination of echocardiographic views for each diagnostic task, improving diagnostic performance while reducing redundant visual input. (This repository corresponds to the paper of the same name.)
 
-## ✨ 功能概览
+## Core Idea
 
-- **多任务诊断**：支持 28 个疾病二分类 + 7 个回归任务
-- **多评估集**：`PVD`（主要切面）/ `MCD`（主要+辅助切面）/ `CMD`（所有切面）
-- **MoE 路由**：文本 + 多路（1~6 路）超声视频作为输入，动态路由到最合适的基座模型
-- **对比基线**：内置 PanEcho、EchoPrime、Lingshu、Medgemma、HuatuoGPT-Vision、Gemma4、Qwen2.5-VL、Qwen3-VL 等模型统一评估
-- **置信区间**：bootstrap（500 次）统计结果
+Echocardiographic diagnosis relies on dynamic cardiac information from multiple views, while **different diagnostic tasks often require different view inputs**. A fixed view combination either introduces redundant visual information or fails to fully exploit task-relevant views. The key contributions of Echo-View are:
 
-## 🧩 系统架构
+- **Two-stage framework**: first visual domain adaptation, then task-guided specialized diagnosis
+- **Progressive Expansion Learning**: progressively expanding view inputs from primary views to multi-view combinations
+- **Task-guided Top-1 routing**: at inference, automatically selects the most suitable diagnostic mode based on the diagnostic prompt and input videos
 
-![EchoView 系统架构](Model.png)
+## System Architecture
 
-## 📁 目录结构
+![Echo-View System Architecture](Model.png)
 
-| 目录/文件 | 说明 |
+## Method Framework
+
+### Stage 1: Visual Domain Adaptation
+The visual encoder is adapted to echocardiography through the **joint supervision of diagnostic classification and quantitative measurement regression**, enabling it to extract more discriminative features from echocardiographic videos.
+
+Corresponding module: `VISUAL_TRAIN/` (joint multi-task training with 28 binary classification + 7 regression tasks)
+
+### Stage 2: Progressive Expansion Learning
+Three diagnostic experts are trained with progressively expanding view input combinations:
+
+| Expert | View Input | Description |
+|---|---|---|
+| PVD Expert | Primary-view | Primary views |
+| MCD Expert | Main + Associated | Main and associated views |
+| CMD Expert | Comprehensive | All views |
+
+Corresponding module: `VLM_TRAIN/` (PVD / MCD / CMD LoRA fine-tuning)
+
+### Inference: Task-guided Top-1 Routing
+At inference, a **Top-1 routing module** selects the most appropriate diagnostic mode among the PVD / MCD / CMD experts based on the diagnostic prompt and input echocardiographic videos.
+
+Corresponding modules: `MoE/` (multimodal routing) + `chat_moe.py`
+
+## Dataset
+
+Evaluated on a large real-world clinical dataset (see the paper):
+
+| Statistic | Value |
 |---|---|
-| `DATA_BUILDER/` | 数据构建：从原始 DICOM 视频生成 VCR / PVD / MCD / CMD 的训练与测试 JSON |
-| `VISUAL_TRAIN/` | 视觉多任务模型训练与预测（Qwen2.5-VL，28 二分类 + 7 回归） |
-| `VLM_TRAIN/` | VLM LoRA 微调与评估（PVD / MCD / CMD，DeepSpeed） |
-| `MoE/` | 多模态 MoE 路由决策系统（文本 + 多路视频 → 路由到 Qwen 模型） |
-| `CMP_Model/` | 对比基线模型统一推理脚本 |
-| `chat.py` / `chat_moe.py` | 交互问答诊断（直接调用 / MoE 路由） |
-| `run_chat_moe.sh` | MoE 路由 + Qwen 问答一键诊断 |
-| `run_train&eval.sh` | 批量训练 + 评估 |
+| Echocardiographic reports | 453,211 |
+| Unique patients | 383,750 |
+| Echocardiographic video samples | 2,269,694 |
 
-## ⚙️ 环境依赖
+- Per-sample input: 1-6 echocardiographic videos plus a diagnostic question
+- Videos are uniformly sampled online from `mp4` (16 frames x 224x224); train/val splits are patient-stratified to prevent leakage
 
-- Python 3.10，conda 环境：`Qwen_back`
-- 主要依赖：`torch`、`transformers`、`deepspeed`、`qwen-vl-utils`、`timm`、`decord`、`opencv-python`、`scikit-learn`、`pandas`、`pyyaml`
-- 部分配置文件中的基座模型、数据路径为本机绝对路径，换机运行时需按实际环境修改对应 `*.yaml` / `*.sh` 中的路径。
+## Experimental Results
 
-## 🚀 快速开始
+Joint classification-and-regression supervision enhances the visual encoder's ability to extract diagnostic features from echocardiographic videos; the routing strategy further improves diagnostic performance while **reducing the amount of visual input**:
 
-### 1. 数据准备（DATA_BUILDER）
+- **Mean AUC: 0.946**
+- **Mean F1-score: 0.907**
+- **Routing allocation**: 42.3% of tasks to PVD expert, 36.7% to MCD expert, 21.0% to CMD expert
+
+These results show that the appropriate view input combination varies across diagnostic tasks and examinations, and Echo-View's routing strategy adaptively selects the optimal views for each task.
+
+## Directory Structure
+
+| Directory / File | Description |
+|---|---|
+| `DATA_BUILDER/` | Data construction: build VCR / PVD / MCD / CMD train/test JSON from raw DICOM videos |
+| `VISUAL_TRAIN/` | **Stage 1** visual domain adaptation: joint classification + regression multi-task training (Qwen2.5-VL) |
+| `VLM_TRAIN/` | **Stage 2** Progressive Expansion Learning: PVD / MCD / CMD three-expert LoRA fine-tuning (DeepSpeed) |
+| `MoE/` | **Inference routing**: multimodal MoE routing module (text + multi-view videos, route to the corresponding expert) |
+| `CMP_Model/` | Comparison baseline inference scripts (PanEcho / EchoPrime / Lingshu / Medgemma / HuatuoGPT-Vision / Gemma4 / Qwen2.5-VL / Qwen3-VL) |
+| `chat.py` / `chat_moe.py` | Interactive diagnosis (direct Q&A / MoE routing) |
+| `run_chat_moe.sh` | One-key diagnosis with MoE routing + expert Q&A |
+| `run_train&eval.sh` | Batch training + evaluation |
+
+## Environment
+
+- Python 3.10, conda environment: `Qwen_back`
+- Main dependencies: `torch`, `transformers`, `deepspeed`, `qwen-vl-utils`, `timm`, `decord`, `opencv-python`, `scikit-learn`, `pandas`, `pyyaml`
+- Some configs use local absolute paths for base models and data; adjust the corresponding `*.yaml` / `*.sh` paths when running on another machine.
+
+## Quick Start
+
+### 1. Data Preparation (DATA_BUILDER)
 
 ```bash
 cd DATA_BUILDER
-# 从 Dataset 原始数据生成 VCR / PVD / MCD / CMD 训练测试 JSON
+# Build VCR / PVD / MCD / CMD train/test JSON from the Dataset
 bash run_build_all.sh
 ```
 
-### 2. 视觉多任务训练（VISUAL_TRAIN）
+### 2. Stage 1: Visual Domain Adaptation (VISUAL_TRAIN)
 
 ```bash
 cd VISUAL_TRAIN
-# 训练：28 二分类 + 7 回归多任务，基于 Qwen2.5-VL-7B-Instruct
+# Train: joint classification + regression multi-task on Qwen2.5-VL-7B-Instruct
 bash run_train.sh <num_epochs> <unfreeze_layers>
 
-# 预测：输出到 pred_output/
+# Predict: results in pred_output/
 bash run_predict.sh
 ```
 
-### 3. VLM LoRA 微调与评估（VLM_TRAIN）
+### 3. Stage 2: Progressive Expansion Learning (VLM_TRAIN)
 
 ```bash
 cd VLM_TRAIN
-# 在 tmux 中启动 LoRA 微调（train_mode / GPU / batch_size 等通过环境变量配置）
+# Launch LoRA fine-tuning in tmux (configure train_mode=PVD/MCD/CMD, GPU, batch_size via env vars)
 bash run_train.sh
 
-# 评估（PVD / MCD / CMD）
+# Evaluate (PVD / MCD / CMD)
 bash run_eval.sh
 ```
 
-### 4. MoE 路由系统（MoE）
+### 4. Routing System (MoE)
 
 ```bash
 cd MoE
-# 冒烟测试（验证维度 / 前向 / 损失）
+# Smoke test (validate dims / forward / loss)
 python scripts/smoke_test.py
 
-# 训练
+# Train the router
 python train.py --config configs/default.yaml
-
-# 推理
-python -c "from inference.predictor import Predictor; ..."
 ```
 
-### 5. 一键问答诊断
+### 5. One-key Diagnosis (Task-guided Routing)
 
 ```bash
-# MoE 路由 + Qwen 问答（读取输入 JSON，批量出结果）
+# Top-1 routing + expert Q&A (reads an input JSON, outputs results in batch)
 bash run_chat_moe.sh
 ```
 
-### 6. 对比模型评估（CMP_Model）
+### 6. Comparison Models (CMP_Model)
 
 ```bash
 cd CMP_Model
-# 通过开关选择要运行的模型，如 PanEcho / EchoPrime / Qwen2.5-VL / Qwen3-VL ...
+# Toggle which models to run, e.g. PanEcho / EchoPrime / Qwen2.5-VL / Qwen3-VL ...
 bash run_all.sh
 ```
 
-## 📊 数据说明
+## Citation
 
-- 原始数据：超声 DICOM 视频，每样本 1~6 路视频 + 诊断问题文本
-- 二分类标签：`mark` 1 = 阳性，-1 = 阴性
-- 评估集划分：`PVD`（主切面）、`MCD`（主+辅助切面）、`CMD`（所有切面）
-- 视频在训练/推理时从 `mp4` 实时抽帧（16 帧 × 224×224），按患者分层切分防数据泄漏
+If you use this work, please cite the corresponding paper:
 
-## 🧠 模型方法
+```bibtex
+@article{echoview,
+  title={Echo-View: Visual Domain Adaptation and Task-guided Multi-view Routing for Echocardiographic Diagnosis},
+  note={Anonymous / under review}
+}
+```
 
-- **视觉多任务模型**：Qwen2.5-VL 微调，同时输出多任务二分类与回归结果
-- **VLM LoRA**：DeepSpeed + LoRA 低秩微调基座模型
-- **MoE 路由**：文本 + 多路视频编码 → 语义路由 → Top-K 专家（Qwen 各尺寸模型）加权决策
+## License / Notes
 
-## 📝 License / 说明
-
-> 本仓库为研究用途。嵌入式第三方模型实现见各子目录对应声明；数据、权重等大文件不随仓库上传（详见 `.gitignore`）。
+> This repository is for research purposes. Third-party model implementations embedded in subdirectories follow their respective declarations; large data and weight files are not uploaded with this repository (see `.gitignore`).
