@@ -50,16 +50,6 @@ Evaluated on a large real-world clinical dataset (see the paper):
 - Per-sample input: 1-6 echocardiographic videos plus a diagnostic question
 - Videos are uniformly sampled online from `mp4` (16 frames x 224x224); train/val splits are patient-stratified to prevent leakage
 
-## Experimental Results
-
-Joint classification-and-regression supervision enhances the visual encoder's ability to extract diagnostic features from echocardiographic videos; the routing strategy further improves diagnostic performance while **reducing the amount of visual input**:
-
-- **Mean AUC: 0.946**
-- **Mean F1-score: 0.907**
-- **Routing allocation**: 42.3% of tasks to PVD expert, 36.7% to MCD expert, 21.0% to CMD expert
-
-These results show that the appropriate view input combination varies across diagnostic tasks and examinations, and Echo-View's routing strategy adaptively selects the optimal views for each task.
-
 ## Directory Structure
 
 | Directory / File | Description |
@@ -75,9 +65,45 @@ These results show that the appropriate view input combination varies across dia
 
 ## Environment
 
-- Python 3.10, conda environment: `Qwen_back`
-- Main dependencies: `torch`, `transformers`, `deepspeed`, `qwen-vl-utils`, `timm`, `decord`, `opencv-python`, `scikit-learn`, `pandas`, `pyyaml`
-- Some configs use local absolute paths for base models and data; adjust the corresponding `*.yaml` / `*.sh` paths when running on another machine.
+The project runs in the conda environment **`Qwen_back`** (Python 3.10).
+
+### Activate the `Qwen_back` environment (g5 training host)
+
+```bash
+# Activate directly (if conda is already initialized in your shell)
+conda activate Qwen_back
+
+# On hosts where conda is not on PATH, source the base profile first, e.g.:
+source /opt/anaconda/etc/profile.d/conda.sh    # or /home/mzhao/.conda/etc/profile.d/conda.sh
+conda activate Qwen_back
+
+# Equivalent one-off: call the env python directly without activating
+/home/mzhao/.conda/envs/Qwen_back/bin/python --version
+```
+
+### Create a fresh `Qwen_back` environment (optional)
+
+```bash
+conda create -n Qwen_back python=3.10 -y
+conda activate Qwen_back
+```
+
+### Install dependencies
+
+```bash
+# Base dependencies used across the training modules
+pip install torch transformers deepspeed qwen-vl-utils timm einops decord \
+            opencv-python numpy scikit-learn pandas pyyaml jupyter
+
+# Or install the MoE module dependencies from its requirements.txt
+pip install -r MoE/requirements.txt
+```
+
+### Notes
+
+- Base models (e.g. Qwen2.5-VL) and data paths inside the configs / shell scripts are **local absolute paths** on the training host. Adjust the corresponding `*.yaml` / `*.sh` when running on another machine.
+- Training on multiple GPUs uses DeepSpeed (`VLM_TRAIN/scripts/zero*.json`).
+- `VISUAL_TRAIN` and `VLM_TRAIN` training run inside `tmux` sessions (see the `run_*.sh` scripts).
 
 ## Quick Start
 

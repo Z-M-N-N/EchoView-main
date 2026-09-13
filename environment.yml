@@ -1,0 +1,34 @@
+name: Qwen_back
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      # ---- Core: PyTorch (CUDA 12.4) ----
+      - --index-url https://download.pytorch.org/whl/cu124
+      - torch
+      - torchvision
+      - torchaudio
+      # ---- LLM / VLM ----
+      - transformers==4.57.0
+      - accelerate
+      - bitsandbytes
+      - qwen-vl-utils
+      - peft==0.20.0
+      - datasets
+      # ---- Common ----
+      - numpy
+      - pandas
+      - tqdm
+      - scikit-learn
+      - decord
+      - deepspeed
+      - ipykernel
+      - modelscope
+      # ---- Flash Attention (CUDA 12, cp310) ----
+      # Installed from the prebuilt wheel for linux x86_64:
+      #   https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/
+      #   flash_attn-2.7.4.post1+cu12torch2.5cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+      - flash-attn==2.7.4.post1
