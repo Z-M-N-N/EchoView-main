@@ -1,0 +1,92 @@
+# ============================================================
+# 多模态 MoE — 3 类路由训练配置 (PVD/MCD/CMD 模型选择)
+# 损失: L = CE + λ_cost * p^T·[1/3,2/3,1]  (视图输入成本正则)
+# 数据: data/index_routing (由三模型评估交集生成的路由标签)
+# ============================================================
+
+seed: 42
+device: cuda
+output_dir: ./outputs_echo_router
+
+input:
+  max_seq_len: 64
+  num_videos_max: 6
+  num_frames: 16
+  frame_size: 224
+  num_classes: 3             # 0=PVD, 1=MCD, 2=CMD
+
+model:
+  d_model: 512
+  d_context: 512
+  num_heads: 8
+  ffn_ratio: 4
+  dropout: 0.1
+  num_latents: 8
+
+  text_encoder:
+    backbone: paraphrase-multilingual-MiniLM-L12-v2
+    backbone_path: /home/mzhao/公共大模型/paraphrase-multilingual-MiniLM-L12-v2
+    freeze_backbone: true
+    projection_dim: 512
+    use_cls: true
+
+  video_encoder:
+    backbone: VideoMAEv2_Base
+    backbone_path: /home/mzhao/暂时不用/对比模型/video-echo-clip-main/VideoMAEv2-Base
+    freeze_backbone: true
+    projection_dim: 512
+    num_frames: 16
+
+  moe:
+    num_experts: 6
+    top_k: 2
+    router_hidden: 1024
+    expert_hidden: 256
+    router_noise_std: 0.01
+    use_noise: true
+
+# ---------- 路由损失配置 ----------
+loss:
+  router: true                       # 使用 RouterCostLoss
+  cost_vector: [0.333333, 0.666667, 1.0]   # PVD/MCD/CMD 归一化视图成本
+  lambda_cost: 0.5                   # 成本正则权重 (可调, 论文 λ_cost)
+  alpha: 0.01                        # (未用于路由任务, 保留占位)
+  beta: 0.01
+
+optim:
+  optimizer: adamw
+  lr: 1e-4
+  backbone_lr: 1e-5
+  weight_decay: 1e-5
+  grad_clip: 1.0
+  warmup_steps: 1000
+  scheduler: cosine_annealing_warm_restarts
+  t_0: 10
+  t_mult: 2
+  eta_min: 1e-6
+
+train:
+  batch_size: 8
+  accumulation_steps: 2
+  epochs: 30
+  amp: true
+  num_workers: 8
+  log_interval: 20
+  save_interval: 1
+  eval_interval: 1
+  gradient_checkpointing: false
+
+data:
+  train_index: data/index_routing/train.json
+  val_index: data/index_routing/val.json
+  video_root: ""
+  preprocess_mode: video
+  transforms:
+    temporal_sample: uniform
+    spatial_size: 224
+    random_hflip: false
+
+inference:
+  use_noise: false
+  force_top_k: true
+  seed: 42

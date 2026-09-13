@@ -1,0 +1,87 @@
+# ============================================================
+# 多模态 MoE — 超声诊断二分类任务配置 (Echo-View_Result)
+# 输出: 2 类 (是/否); 动态 K 视频 (1~6 路); mp4 实时抽帧
+# ============================================================
+
+seed: 42
+device: cuda
+output_dir: ./outputs_echo
+
+input:
+  max_seq_len: 64
+  num_videos_max: 6          # 超声视图最多 6 路
+  num_frames: 16
+  frame_size: 224
+  num_classes: 3             # 3 类路由 (规格书: 左转/直行/右转; 本项目映射到对应 Qwen 模型)
+
+model:
+  d_model: 512
+  d_context: 512
+  num_heads: 8
+  ffn_ratio: 4
+  dropout: 0.1
+  num_latents: 8
+
+  text_encoder:
+    backbone: paraphrase-multilingual-MiniLM-L12-v2
+    backbone_path: /home/mzhao/公共大模型/paraphrase-multilingual-MiniLM-L12-v2
+    freeze_backbone: true
+    projection_dim: 512
+    use_cls: true
+
+  video_encoder:
+    backbone: VideoMAEv2_Base
+    backbone_path: /home/mzhao/暂时不用/对比模型/video-echo-clip-main/VideoMAEv2-Base
+    freeze_backbone: true
+    projection_dim: 512
+    num_frames: 16
+
+  moe:
+    num_experts: 6
+    top_k: 2
+    router_hidden: 1024
+    expert_hidden: 256
+    router_noise_std: 0.01
+    use_noise: true
+
+loss:
+  alpha: 0.01
+  beta: 0.01
+
+optim:
+  optimizer: adamw
+  lr: 1e-4
+  backbone_lr: 1e-5
+  weight_decay: 1e-5
+  grad_clip: 1.0
+  warmup_steps: 1000
+  scheduler: cosine_annealing_warm_restarts
+  t_0: 10
+  t_mult: 2
+  eta_min: 1e-6
+
+train:
+  batch_size: 8              # 6 路视频, 实时抽帧是瓶颈, 8 稳且快
+  accumulation_steps: 2
+  epochs: 30
+  amp: true
+  num_workers: 8
+  log_interval: 20
+  save_interval: 1
+  eval_interval: 1
+  gradient_checkpointing: false
+
+data:
+  train_index: data/index/train.json
+  val_index: data/index/val.json
+  video_root: ""
+  preprocess_mode: video     # 直接从 mp4 实时抽帧
+  transforms:
+    temporal_sample: uniform
+    spatial_size: 224
+    random_hflip: false
+
+inference:
+  use_noise: false
+  force_top_k: true
+  seed: 42

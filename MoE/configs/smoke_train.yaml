@@ -1,0 +1,68 @@
+seed: 42
+device: cuda
+output_dir: ./outputs_smoke
+input:
+  max_seq_len: 64
+  num_videos_max: 4
+  num_frames: 16
+  frame_size: 224
+  num_classes: 3
+model:
+  d_model: 512
+  d_context: 512
+  num_heads: 8
+  ffn_ratio: 4
+  dropout: 0.1
+  num_latents: 8
+  text_encoder:
+    backbone: bert-base-uncased
+    backbone_path: weights/bert-base-uncased
+    freeze_backbone: true
+    projection_dim: 512
+  video_encoder:
+    backbone: VideoMAEv2_Base
+    backbone_path: /home/mzhao/暂时不用/对比模型/video-echo-clip-main/VideoMAEv2-Base
+    freeze_backbone: true
+    projection_dim: 512
+    num_frames: 16
+  moe:
+    num_experts: 6
+    top_k: 2
+    router_hidden: 1024
+    expert_hidden: 256
+    router_noise_std: 0.01
+    use_noise: true
+loss:
+  alpha: 0.01
+  beta: 0.01
+optim:
+  optimizer: adamw
+  lr: 1e-4
+  backbone_lr: 1e-5
+  weight_decay: 1e-5
+  warmup_steps: 5
+  scheduler: cosine_annealing_warm_restarts
+  t_0: 1
+  t_mult: 2
+  eta_min: 1e-6
+train:
+  batch_size: 4
+  accumulation_steps: 1
+  epochs: 1
+  amp: true
+  num_workers: 0
+  log_interval: 2
+  save_interval: 1
+  eval_interval: 1
+  gradient_checkpointing: false
+data:
+  train_index: data/index/train.json
+  val_index: data/index/val.json
+  video_root: ""
+  transforms:
+    temporal_sample: uniform
+    spatial_size: 224
+inference:
+  use_noise: false
+  force_top_k: true
+  seed: 42

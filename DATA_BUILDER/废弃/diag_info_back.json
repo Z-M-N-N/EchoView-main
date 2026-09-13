@@ -1,0 +1,318 @@
+{
+    "收缩活动减弱": {
+        "desc": "RVSystolicFunction",
+        "primary_views": [
+            "A4C"
+        ],
+        "supplementary_views": [
+            "A2C",
+            "Apical Doppler",
+            "A3C",
+            "Parasternal Short",
+            "Doppler Parasternal Short",
+            "Parasternal Long",
+            "Subcostal",
+            "A5C"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "收缩活动减弱",
+            "收缩活动稍减弱",
+            "收缩活动明显减弱",
+            "多壁段收缩活动异常"
+        ],
+        "d_or_f": "both",
+        "prompt": "请查看视频,请根据超声影像特征判断心脏收缩活动是否减弱,输出是或否."
+    },
+    "心包积液": {
+        "desc": "pericardial-effusion",
+        "primary_views": [
+            "A4C"
+        ],
+        "supplementary_views": [
+            "Parasternal Long",
+            "A3C",
+            "A2C",
+            "A5C",
+            "Parasternal Short",
+            "Subcostal"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "少量心包积液",
+            "中大量心包积液",
+            "中量心包积液",
+            "大量心包积液"
+        ],
+        "d_or_f": "both",
+        "prompt": "请仔细查看这段心脏超声视频，请根据超声影像特征判断是否存在心包积液，仅输出'是'或'否'。"
+    },
+    "左房增大": {
+        "desc": "LASize",
+        "primary_views": [
+            "A4C"
+        ],
+        "supplementary_views": [
+            "A2C",
+            "A3C",
+            "Doppler Parasternal Long",
+            "A5C",
+            "Parasternal Long"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "左房增大",
+            "左房显著增大",
+            "双房增大",
+            "左房室增大",
+            "全心增大"
+        ],
+        "d_or_f": "both",
+        "prompt": "请查看视频,请根据超声影像特征判断左房是否增大,输出是或否."
+    },
+    "室壁瘤": {
+        "desc": "心尖部室壁瘤",
+        "primary_views": [
+            "A4C"
+        ],
+        "supplementary_views": [
+            "A2C",
+            "A3C",
+            "Parasternal Long",
+            "Parasternal Short",
+            "A5C"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "室壁瘤",
+            "室壁瘤形成"
+        ],
+        "d_or_f": "both",
+        "prompt": "请查看视频,请根据超声影像特征判断是否有室壁瘤,输出是或否."
+    },
+    "三尖瓣反流": {
+        "desc": "TVRegurgitation",
+        "primary_views": [
+            "A4C",
+            "Apical Doppler"
+        ],
+        "supplementary_views": [
+            "Parasternal Short",
+            "Doppler Parasternal Short",
+            "Subcostal"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "轻中度三尖瓣反流",
+            "中度三尖瓣反流",
+            "中重度三尖瓣反流",
+            "重度三尖瓣反流",
+            "极重度三尖瓣反流"
+        ],
+        "d_or_f": "both",
+        "prompt": "请查看视频,请根据超声影像特征判断三尖瓣是否反流,输出是或否."
+    },
+    "人工支架": {
+        "desc": "人工支架",
+        "primary_views": [
+            "Parasternal Long"
+        ],
+        "supplementary_views": [
+            "A3C",
+            "SSN",
+            "A5C",
+            "Doppler Parasternal Long"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "人工支架"
+        ],
+        "d_or_f": "both",
+        "prompt": "请查看视频,请根据超声影像特征判断是否有人工支架,输出是或否."
+    },
+    "双房增大": {
+        "desc": "双房增大",
+        "primary_views": [
+            "A4C"
+        ],
+        "supplementary_views": [
+            "A2C",
+            "Parasternal Short",
+            "A3C",
+            "Doppler Parasternal Short",
+            "Doppler Parasternal Long",
+            "Subcostal",
+            "A5C",
+            "Parasternal Long"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "双房增大",
+            "全心增大"
+        ],
+        "d_or_f": "both",
+        "prompt": "请查看视频,请根据超声影像特征判断双房是否增大,输出是或否."
+    },
+    "人工主动脉瓣": {
+        "desc": "人工主动脉瓣",
+        "primary_views": [
+            "Parasternal Long"
+        ],
+        "supplementary_views": [
+            "A3C",
+            "A5C",
+            "Doppler Parasternal Long",
+            "Doppler Parasternal Short",
+            "Parasternal Short"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "人工主动脉瓣",
+            "人工生物主动脉瓣",
+            "人工机械主动脉瓣",
+            "主动脉瓣换瓣",
+            "主动脉瓣置换",
+            "人工瓣膜置换"
+        ],
+        "d_or_f": "both",
+        "prompt": "请查看视频,请根据超声影像特征判断是否有人工主动脉瓣,输出是或否."
+    },
+    "二尖瓣反流": {
+        "desc": "MVRegurgitation",
+        "primary_views": [
+            "A4C"
+        ],
+        "supplementary_views": [
+            "A2C",
+            "A3C",
+            "A5C",
+            "Doppler Parasternal Long",
+            "Parasternal Long"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "轻中度二尖瓣反流",
+            "中度二尖瓣反流",
+            "中重度二尖瓣反流",
+            "重度二尖瓣反流",
+            "极重度二尖瓣反流",
+            "二尖瓣脱垂伴重度反流"
+        ],
+        "d_or_f": "both",
+        "prompt": "请分析这段心脏超声视频，请根据超声影像特征判断是否存在二尖瓣反流现象。只输出'是'或'否'"
+    },
+    "右房增大": {
+        "desc": "RASize",
+        "primary_views": [
+            "A4C"
+        ],
+        "supplementary_views": [
+            "Parasternal Short",
+            "Doppler Parasternal Short",
+            "Subcostal"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "右房增大",
+            "双房增大",
+            "全心增大"
+        ],
+        "d_or_f": "both",
+        "prompt": "请查看视频,请根据超声影像特征判断右房是否增大,输出是或否."
+    },
+    "左室增大": {
+        "desc": "LVSize",
+        "primary_views": [
+            "A4C"
+        ],
+        "supplementary_views": [
+            "A2C",
+            "A3C",
+            "A5C",
+            "Doppler Parasternal Long",
+            "Parasternal Long",
+            "Parasternal Short"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "左室增大",
+            "左房室增大",
+            "全心增大"
+        ],
+        "d_or_f": "both",
+        "prompt": "请查看视频,请根据超声影像特征判断左室是否增大,输出是或否."
+    },
+    "二尖瓣狭窄": {
+        "desc": "MVStenosis",
+        "primary_views": [
+            "A4C",
+            "Apical Doppler"
+        ],
+        "supplementary_views": [
+            "A2C",
+            "A3C",
+            "A5C",
+            "Doppler Parasternal Long",
+            "Parasternal Long"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "轻中度二尖瓣狭窄",
+            "中度二尖瓣狭窄",
+            "中重度二尖瓣狭窄",
+            "重度二尖瓣狭窄",
+            "极重度二尖瓣狭窄",
+            "二尖瓣轻中度狭窄",
+            "二尖瓣中度狭窄",
+            "二尖瓣中重度狭窄",
+            "二尖瓣重度狭窄",
+            "二尖瓣极重度狭窄"
+        ],
+        "d_or_f": "both",
+        "prompt": "请查看视频,请根据超声影像特征判断二尖瓣是否狭窄,输出是或否."
+    },
+    "右室增大": {
+        "desc": "RVSize",
+        "primary_views": [
+            "A4C"
+        ],
+        "supplementary_views": [
+            "Parasternal Short",
+            "Doppler Parasternal Short",
+            "Subcostal"
+        ],
+        "N": [
+            "静息状态下超声心动图未见异常"
+        ],
+        "P": [
+            "右室增大",
+            "全心增大"
+        ],
+        "d_or_f": "both",
+        "prompt": "请查看视频,请根据超声影像特征判断右室是否增大,输出是或否."
+    }
+}

@@ -1,0 +1,63 @@
+# ==============================================
+# EchoView 项目 .gitignore
+# 过滤不适合上传 GitHub 的文件
+# ==============================================
+
+# ---------- Python / 缓存 ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# ---------- 操作系统 / 编辑器 ----------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ---------- 模型权重 / 检查点（大文件，勿上传） ----------
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.h5
+*.hdf5
+*.pkl
+*.npy
+MoE/weights/
+**/checkpoints/
+
+# ---------- 输出 / 训练产物 ----------
+outputs/
+**/outputs_*/
+VISUAL_TRAIN/pred_output/
+MoE/outputs_echo_router/
+MoE/outputs_echo_router_small/
+
+# ---------- 日志 ----------
+*.log
+MoE/logs_*.txt
+
+# ---------- 数据（大体积原始/中间数据） ----------
+data/preprocessed/
+MoE/data/preprocessed/
+MoE/data/index*/
+MoE/data/test_batch_*.json
+MoE/data/result_*.json
+MoE/sample_batch.json
+MoE/sample_input.json
+MoE/result_batch.json
+
+# ---------- 字体等二进制资源 ----------
+**/*.ttf
+**/*.otf

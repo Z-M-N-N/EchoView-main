@@ -1,0 +1,239 @@
+# Adopted from https://github.com/lm-sys/FastChat. Below is the original copyright:
+# Adopted from tatsu-lab@stanford_alpaca. Below is the original copyright:
+#    Copyright 2023 Rohan Taori, Ishaan Gulrajani, Tianyi Zhang, Yann Dubois, Xuechen Li
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
+import os
+import logging
+import pathlib
+import torch
+print("="*50)
+print("GPU 信息:")
+print("="*50)
+
+# 检查CUDA是否可用
+print(f"CUDA 是否可用: {torch.cuda.is_available()}")
+
+if torch.cuda.is_available():
+    # 当前设备信息
+    current_device = torch.cuda.current_device()
+    print(f"当前设备索引: {current_device}")
+    print(f"当前设备名称: {torch.cuda.get_device_name(current_device)}")
+    print(f"可见GPU数量: {torch.cuda.device_count()}")
+    
+    # 显示所有可见显卡
+    for i in range(torch.cuda.device_count()):
+        print(f"\n显卡 {i}:")
+        print(f"  名称: {torch.cuda.get_device_name(i)}")
+        print(f"  显存总量: {torch.cuda.get_device_properties(i).total_memory / 1024**3:.2f} GB")
+        
+        # 当前显存使用情况
+        allocated = torch.cuda.memory_allocated(i) / 1024**3
+        reserved = torch.cuda.memory_reserved(i) / 1024**3
+        print(f"  已分配显存: {allocated:.2f} GB")
+        print(f"  保留显存: {reserved:.2f} GB")
+    
+    print("="*50)
+else:
+    print("警告: CUDA不可用，将使用CPU训练")
+
+import transformers
+print(transformers.__version__)
+import sys
+from pathlib import Path
+
+project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root))
+from train_tool import LLMTrainingLossEarlyStopping
+from trainer import replace_qwen2_vl_attention_class
+from transformers import (
+    Qwen2_5_VLForConditionalGeneration
+)
+
+# from Local_Qwen2_5VL import (
+#     Qwen2_5_VLForConditionalGeneration
+# )
+from data.data_processor import make_supervised_data_module
+from train.argument import (
+    ModelArguments,
+    DataArguments,
+    TrainingArguments,
+)
+from transformers import AutoProcessor, Trainer
+
+local_rank = None
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
+def rank0_print(*args):
+    if local_rank == 0:
+        print(*args)
+
+
+def safe_save_model_for_hf_trainer(trainer: transformers.Trainer, output_dir: str):
+    """Collects the state dict and dump to disk."""
+
+    if trainer.deepspeed:
+        torch.cuda.synchronize()
+        trainer.save_model(output_dir)
+        return
+
+    state_dict = trainer.model.state_dict()
+    if trainer.args.should_save:
+        cpu_state_dict = {key: value.cpu() for key, value in state_dict.items()}
+        del state_dict
+        trainer._save(output_dir, state_dict=cpu_state_dict)  # noqa
+
+
+def set_model(model_args, model):
+    if model_args.tune_mm_vision:
+        for n, p in model.visual.named_parameters():
+            p.requires_grad = True
+    else:
+        for n, p in model.visual.named_parameters():
+            p.requires_grad = False
+
+    if model_args.tune_mm_mlp:
+        for n, p in model.visual.merger.named_parameters():
+            p.requires_grad = True
+    else:
+        for n, p in model.visual.merger.named_parameters():
+            p.requires_grad = False
+
+    if model_args.tune_mm_llm:
+        for n, p in model.language_model.named_parameters():
+            p.requires_grad = True
+        model.lm_head.requires_grad = True
+    else:
+        for n, p in model.language_model.named_parameters():
+            p.requires_grad = False
+        model.lm_head.requires_grad = False
+
+
+def train(attn_implementation="flash_attention_2"):
+    global local_rank
+
+    parser = transformers.HfArgumentParser(
+        (ModelArguments, DataArguments, TrainingArguments)
+    )
+    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    local_rank = training_args.local_rank
+    os.makedirs(training_args.output_dir, exist_ok=True)
+
+    
+    print("加载模型权重:",model_args.model_name_or_path)
+    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+        model_args.model_name_or_path,
+        cache_dir=training_args.cache_dir,
+        attn_implementation=attn_implementation,
+        dtype=(torch.bfloat16 if training_args.bf16 else None),
+        use_safetensors=True
+    )
+
+    # ===== 添加调试代码 =====
+    print("\n=== 调试：检查模型加载 ===")
+    print(f"Model type: {type(model)}")
+    print(f"Has visual: {hasattr(model, 'visual')}")
+
+    if hasattr(model, 'visual'):
+        # 检查 visual 模块的参数
+        for name, param in model.visual.named_parameters():
+            print(f"  {name}: {param.shape}")
+            break  # 只打印第一个参数
+        print(f"Visual parameter count: {sum(p.numel() for p in model.visual.parameters())}")
+
+
+    print("启动2.5VL模型")
+    data_args.model_type = "qwen2.5vl"
+   
+
+    print(f'the initlized model is {model_args.model_name_or_path} the class is {model.__class__.__name__}')
+    processor = AutoProcessor.from_pretrained(
+        model_args.model_name_or_path
+    )
+
+
+    if data_args.data_flatten or data_args.data_packing:
+        replace_qwen2_vl_attention_class()
+    model.config.use_cache = False
+
+    if training_args.gradient_checkpointing:
+        if hasattr(model, "enable_input_require_grads"):
+            model.enable_input_require_grads()
+        else:
+
+            def make_inputs_require_grad(module, input, output):
+                output.requires_grad_(True)
+
+            model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
+
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path,
+
+        cache_dir=training_args.cache_dir,
+        model_max_length=training_args.model_max_length,
+        padding_side="right",
+        use_fast=False,
+    )
+
+    if training_args.lora_enable:
+        from peft import LoraConfig, get_peft_model, TaskType
+        print("LoRA enabled")
+
+        # for p in model.parameters():
+        #     p.requires_grad = False
+
+        lora_config = LoraConfig(
+            r=training_args.lora_r or 64,
+            lora_alpha=training_args.lora_alpha or 128,
+            lora_dropout=training_args.lora_dropout or 0.05,
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # Qwen 的 attention 线性层
+            bias="none",
+            task_type=TaskType.CAUSAL_LM,
+        )
+        model = get_peft_model(model, lora_config)
+        model.print_trainable_parameters()
+    else:
+        set_model(model_args, model)
+
+        if torch.distributed.get_rank() == 0:
+            model.visual.print_trainable_parameters()
+            model.model.print_trainable_parameters()
+    
+    data_module = make_supervised_data_module(processor, data_args=data_args)
+
+
+    trainer = Trainer(
+        model=model,
+        processing_class=tokenizer,
+        args=training_args, 
+        callbacks=[LLMTrainingLossEarlyStopping()], **data_module
+    )
+    if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
+        logging.info("checkpoint found, resume training")
+        trainer.train(resume_from_checkpoint=True)
+    else:
+        trainer.train()
+    trainer.save_state()
+
+    model.config.use_cache = True
+
+    safe_save_model_for_hf_trainer(trainer=trainer, output_dir=training_args.output_dir)
+    
+    processor.save_pretrained(training_args.output_dir)
+
+
+if __name__ == "__main__":
+    train(attn_implementation="flash_attention_2")

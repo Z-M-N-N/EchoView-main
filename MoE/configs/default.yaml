@@ -1,0 +1,96 @@
+# ============================================================
+# 多模态 MoE 路由决策系统 — 默认配置 (架构规格书 v1.0)
+# ============================================================
+
+# ---------- 通用 ----------
+seed: 42
+device: cuda
+output_dir: ./outputs
+project_name: multimodal_moe
+
+# ---------- 输入规格 ----------
+input:
+  max_seq_len: 64          # S
+  num_videos_max: 4        # K_max
+  num_frames: 16           # T
+  frame_size: 224          # H = W
+  num_classes: 3           # 左转/直行/右转
+
+# ---------- 模型 ----------
+model:
+  d_model: 512
+  d_context: 512
+  num_heads: 8
+  ffn_ratio: 4             # FFN 中间维度 = d_model * ffn_ratio
+  dropout: 0.1
+  num_latents: 8           # Perceiver 潜变量 M
+
+  text_encoder:
+    backbone: bert-base-uncased
+    backbone_path: weights/bert-base-uncased   # 用户自行下载放置；不存在则随机初始化
+    freeze_backbone: true
+    projection_dim: 512    # 768 -> 512
+    use_cls: true
+
+  video_encoder:
+    backbone: VideoMAEv2_Base
+    backbone_path: /home/mzhao/暂时不用/对比模型/video-echo-clip-main/VideoMAEv2-Base
+    freeze_backbone: true
+    projection_dim: 512    # 768 -> 512
+    num_frames: 16
+
+  moe:
+    num_experts: 6         # N
+    top_k: 2               # K_top
+    router_hidden: 1024
+    expert_hidden: 256
+    router_noise_std: 0.01 # 仅训练
+    use_noise: true
+
+# ---------- 损失 ----------
+loss:
+  alpha: 0.01              # 负载均衡损失系数
+  beta: 0.01               # 重要性损失系数
+
+# ---------- 优化 ----------
+optim:
+  optimizer: adamw
+  lr: 1e-4
+  backbone_lr: 1e-5        # 若解冻主干时使用
+  weight_decay: 1e-5
+  grad_clip: 1.0
+  warmup_steps: 1000
+  scheduler: cosine_annealing_warm_restarts
+  t_0: 10                  # 首次重启周期(epoch)
+  t_mult: 2
+  eta_min: 1e-6
+
+# ---------- 训练 ----------
+train:
+  batch_size: 32
+  accumulation_steps: 2    # 等效 batch = 64
+  epochs: 100
+  amp: true
+  num_workers: 4
+  log_interval: 20
+  save_interval: 1         # epoch
+  eval_interval: 1
+  max_grad_norm: 1.0
+  gradient_checkpointing: false   # VideoMAE 显存不足时开启
+
+# ---------- 数据 ----------
+data:
+  train_index: data/index/train.json
+  val_index: data/index/val.json
+  video_root: data/videos
+  preprocessed_root: data/preprocessed
+  transforms:
+    temporal_sample: uniform      # uniform | random
+    spatial_size: 224
+    random_hflip: false
+
+# ---------- 推理 ----------
+inference:
+  use_noise: false
+  force_top_k: true
+  seed: 42

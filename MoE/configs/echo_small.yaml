@@ -1,0 +1,88 @@
+# ============================================================
+# 多模态 MoE — 超声诊断二分类 小规模验证配置
+# 文本编码器: g5 现成多语言 BERT (方案1, 支持中文)
+# 数据: data/index_small (336 train / 224 val, 链路验证用)
+# ============================================================
+
+seed: 42
+device: cuda
+output_dir: ./outputs_echo_small
+
+input:
+  max_seq_len: 64
+  num_videos_max: 6
+  num_frames: 16
+  frame_size: 224
+  num_classes: 3             # 3 类路由
+
+model:
+  d_model: 512
+  d_context: 512
+  num_heads: 8
+  ffn_ratio: 4
+  dropout: 0.1
+  num_latents: 8
+
+  text_encoder:
+    backbone: paraphrase-multilingual-MiniLM-L12-v2
+    backbone_path: /home/mzhao/公共大模型/paraphrase-multilingual-MiniLM-L12-v2
+    freeze_backbone: true
+    projection_dim: 512
+    use_cls: true
+
+  video_encoder:
+    backbone: VideoMAEv2_Base
+    backbone_path: /home/mzhao/暂时不用/对比模型/video-echo-clip-main/VideoMAEv2-Base
+    freeze_backbone: true
+    projection_dim: 512
+    num_frames: 16
+
+  moe:
+    num_experts: 6
+    top_k: 2
+    router_hidden: 1024
+    expert_hidden: 256
+    router_noise_std: 0.01
+    use_noise: true
+
+loss:
+  alpha: 0.01
+  beta: 0.01
+
+optim:
+  optimizer: adamw
+  lr: 1e-4
+  backbone_lr: 1e-5
+  weight_decay: 1e-5
+  grad_clip: 1.0
+  warmup_steps: 10
+  scheduler: cosine_annealing_warm_restarts
+  t_0: 2
+  t_mult: 2
+  eta_min: 1e-6
+
+train:
+  batch_size: 4
+  accumulation_steps: 1
+  epochs: 3
+  amp: true
+  num_workers: 2
+  log_interval: 10
+  save_interval: 1
+  eval_interval: 1
+  gradient_checkpointing: false
+
+data:
+  train_index: data/index_small/train.json
+  val_index: data/index_small/val.json
+  video_root: ""
+  preprocess_mode: video
+  transforms:
+    temporal_sample: uniform
+    spatial_size: 224
+    random_hflip: false
+
+inference:
+  use_noise: false
+  force_top_k: true
+  seed: 42

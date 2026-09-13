@@ -1,0 +1,8 @@
+torch>=2.7
+transformers>=4.57
+timm
+einops
+decord
+opencv-python
+numpy
+pyyaml
