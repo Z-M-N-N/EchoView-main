@@ -123,15 +123,15 @@
         "state":"ok",
         "desc": "MVStenosis",
         "primary_views": [
-            "A4C",
-            "Apical Doppler"
+            "A4C"
         ],
         "supplementary_views": [
             "A2C",
             "A3C",
             "A5C",
             "Doppler Parasternal Long",
-            "Parasternal Long"
+            "Parasternal Long",
+            "Apical Doppler"
         ],
         "N": [
             "静息状态下超声心动图未见异常"
@@ -260,14 +260,15 @@
     "主动脉瓣反流": {
         "desc": "AVRegurg",
         "primary_views": [
-            "Parasternal Long"
+            "Doppler Parasternal Long"
         ],
         "supplementary_views": [
             "A3C",
             "A5C",
             "Doppler Parasternal Long",
             "Doppler Parasternal Short",
-            "Parasternal Short"
+            "Parasternal Short",
+            "Parasternal Long"
         ],
         "N": [
             "静息状态下超声心动图未见异常"
@@ -609,15 +610,15 @@
     "肥厚型心肌病": {
         "desc": "肥厚型心肌病",
         "primary_views": [
-            "A4C",
-            "Parasternal Long"
+            "A4C"
         ],
         "supplementary_views": [
             "A2C",
             "A3C",
             "Doppler Parasternal Long",
             "A5C",
-            "Parasternal Short"
+            "Parasternal Short",
+            "Parasternal Long"
         ],
         "N": [
             "静息状态下超声心动图未见异常"

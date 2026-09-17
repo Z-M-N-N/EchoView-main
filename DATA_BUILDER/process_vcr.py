@@ -38,6 +38,42 @@ def get_all_subfolders(root_dir, exclude_pattern="Train_Test"):
     return subfolders
 
 
+def get_subfolders_with_cache(root, cache_file, refresh=False):
+    """获取所有包含 report.json 的子文件夹路径列表；复用缓存避免每次全量扫描。
+
+    与 process_pvd_mcd_cmd.py 共用同一个缓存文件（默认 subfolders_cache.json）。
+    内容为 {root, folders}。下次运行若 root 一致且未强制刷新，直接读缓存，
+    跳过对 4.8 万个子文件夹的目录遍历。数据有新增/变动时可用 --refresh_cache
+    强制重扫（或删除缓存文件）。
+    """
+    root = os.path.abspath(root)
+    if not refresh and os.path.exists(cache_file):
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                cache = json.load(f)
+            folders = cache.get("folders")
+            if isinstance(folders, list) and cache.get("root") == root:
+                print(f"[缓存命中] 从 {cache_file} 读取 {len(folders)} 个文件夹（跳过扫描）")
+                return folders
+            print("缓存与当前数据目录不匹配，重新扫描...")
+        except Exception as e:
+            print(f"缓存读取失败({e})，重新扫描...")
+
+    print("[扫描] 遍历数据目录，首次较慢（约10~20秒）...")
+    all_subfolders = get_all_subfolders(root)
+    test_folders = [f for f in all_subfolders if os.path.exists(os.path.join(f, "report.json"))]
+
+    try:
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump({"root": root, "count": len(test_folders), "folders": test_folders},
+                      f, ensure_ascii=False)
+        print(f"[缓存已写入] {len(test_folders)} 个文件夹 -> {cache_file}")
+    except Exception as e:
+        print(f"写入缓存失败({e})，本次运行不缓存")
+    return test_folders
+
+
 MV_NAME = ['主动脉根部内径', '左房内径', '左室舒张末内径', '左室收缩末内径', '室间隔厚度', '左室后壁厚度', '肺动脉收缩压']
 def deal_vcr(folder, diag_info):
     """处理单个文件夹，返回诊断对话列表（使用所有切面）"""
@@ -100,6 +136,11 @@ def main():
                        help='随机种子，默认42')
     parser.add_argument('--mode_dir_name', type=str, default='Train_Test_JSON2',
                            help='输出目录模式，默认')
+    parser.add_argument('--cache_file', type=str,
+                        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "subfolders_cache.json"),
+                        help='文件夹扫描结果缓存文件路径（默认 DATA_BUILDER/subfolders_cache.json）')
+    parser.add_argument('--refresh_cache', action='store_true',
+                        help='忽略缓存，强制重新扫描数据目录')
     
     # 解析命令行参数
     args = parser.parse_args()
@@ -122,26 +163,16 @@ def main():
   
     deal_mode = deal_vcr  # 默认使用 deal_vcr 处理所有切面
     
-    # 第一步：扫描文件夹
-    print("\n[1/4] 扫描所有子文件夹...")
-    all_subfolders = get_all_subfolders(root)
-    print(f"找到 {len(all_subfolders)} 个子文件夹")
-    
+    # 第一步：扫描并筛选包含 report.json 的文件夹（带缓存，避免重复遍历 4.8 万个文件夹）
+    print("\n[1/4] 扫描并筛选包含 report.json 的文件夹...")
+    test_folders = get_subfolders_with_cache(root, args.cache_file, args.refresh_cache)
+    print(f"找到 {len(test_folders)} 个包含 report.json 的文件夹")
+
     if not global_diag_info:
         print("错误: 无法加载 diag_info.json")
         return
-    
+
     print(f"加载了 {len(global_diag_info)} 个诊断项")
-    
-    # 第二步：筛选包含 report.json 的文件夹
-    print("\n[2/4] 筛选包含 report.json 的文件夹...")
-    test_folders = []
-    for folder in tqdm(all_subfolders, desc="扫描文件夹", unit="个"):
-        report_json_path = os.path.join(folder, "report.json")
-        if os.path.exists(report_json_path):
-            test_folders.append(folder)
-    
-    print(f"找到 {len(test_folders)} 个包含 report.json 的文件夹")
     
     # 第三步：处理数据
     print("\n[3/4] 处理诊断数据...")
@@ -150,6 +181,7 @@ def main():
     fail_count = 0
 
     ALL_CONVS=[]
+    folder_convs = {}   # folder -> 该患者的 conv 列表 (用于患者级切分)
     for folder in tqdm(test_folders, desc="处理文件夹", unit="个"):
         vcr_convs = deal_mode(folder, global_diag_info)
         
@@ -157,6 +189,7 @@ def main():
             fail_count += 1
             continue
         success_count += 1
+        folder_convs[folder] = vcr_convs
         ALL_CONVS.extend(vcr_convs)
     
     # 第四步：保存结果
@@ -166,7 +199,13 @@ def main():
     os.makedirs(output_dir_train, exist_ok=True)
     os.makedirs(output_dir_test, exist_ok=True)
 
-    train_list, test_list = split_train_test(ALL_CONVS, test_size=test_size, random_state=random_seed)
+    # 以"患者/文件夹"为单位切分 train/test，同一患者的所有切面只出现在一侧（消除泄露）
+    all_folders = sorted(folder_convs.keys())
+    train_folders, test_folders = train_test_split(
+        all_folders, test_size=test_size, random_state=random_seed, shuffle=True)
+    train_set = set(train_folders); test_set = set(test_folders)
+    train_list = [c for f in train_folders for c in folder_convs[f]]
+    test_list  = [c for f in test_folders  for c in folder_convs[f]]
     
     output_path = os.path.join(output_dir_train, f"visual_multi_task.json")
     save_json(train_list, output_path)

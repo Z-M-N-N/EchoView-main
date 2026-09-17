@@ -1,6 +1,0 @@
-__pycache__/
-*.pyc
-outputs/
-data/preprocessed/
-weights/bert-base-uncased/
-*.pt

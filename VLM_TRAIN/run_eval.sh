@@ -69,7 +69,6 @@ tmux send-keys -t "$SESSION_NAME" "
     echo \"  eval_diag_name      : $eval_diag_name\"
     echo \"  GPU_ID         : $GPU_ID\"
     echo \"  GPU_NUM        : $GPU_NUM\"
-    echo \"  lora_checkpoint     : $lora_checkpoint\"
     echo \"  eval_sample_num       : $eval_sample_num\"
     echo \"  llm     : $llm\"
     echo \"  lora_checkpoint      : $lora_checkpoint\"
@@ -82,7 +81,10 @@ tmux send-keys -t "$SESSION_NAME" "
     # 启动推理
     python inference.py \
         --model_path \"${llm}\" \
-        --lora_path \"${lora_checkpoint}\" \
+        --diagnostic_mode \"${diagnostic_mode}\" \
+        --lora_path_PVD \"${lora_path_PVD}\" \
+        --lora_path_MCD \"${lora_path_MCD}\" \
+        --lora_path_CMD \"${lora_path_CMD}\" \
         --data_path \"${test_json_dir}\" \
         --diag_item \"${eval_diag_name}\" \
         --sample_size ${eval_sample_num} \

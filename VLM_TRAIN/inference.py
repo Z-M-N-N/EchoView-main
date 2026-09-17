@@ -135,7 +135,7 @@ def load_json(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def inference(model, processor, video, prompt,num_frames):
+def inference(model, processor,  prompt,num_frames,video=None,):
     """执行多模态推理"""
     try:
         if video is None:
@@ -224,7 +224,11 @@ def main():
     parser = argparse.ArgumentParser(description='Qwen2.5-VL 视频理解推理脚本')
     parser.add_argument('--model_path', type=str, default="", help='基础模型路径')
     parser.add_argument('--processor_path', type=str, default="", help='处理器路径')
-    parser.add_argument('--lora_path', type=str, default="", help='LoRA权重路径')
+    parser.add_argument('--diagnostic_mode', type=str, default="", help='诊断模式')
+
+    parser.add_argument('--lora_path_PVD', type=str, default="", help='LoRA权重路径')
+    parser.add_argument('--lora_path_AVD', type=str, default="", help='LoRA权重路径')
+    parser.add_argument('--lora_path_CMD', type=str, default="", help='LoRA权重路径')
     parser.add_argument('--diag_item_config', type=str, default="../DATA_BUILDER/diag_info.json", help='LoRA权重路径')
     parser.add_argument('--device_map', type=str, default="auto", help='设备映射策略 (auto/cuda/cpu)')
     parser.add_argument('--torch_dtype', type=str, default="auto", choices=['auto', 'float16', 'float32'], help='torch数据类型 (auto/float16/float32)')
@@ -262,30 +266,91 @@ def main():
     
     # ============ 加载模型 ============
     print("正在加载模型...")
+    # processor = AutoProcessor.from_pretrained(args.processor_path)
+    #     # 处理torch_dtype
+    # if args.torch_dtype == "float16":
+    #     torch_dtype = torch.float16
+    # elif args.torch_dtype == "float32":
+    #     torch_dtype = torch.float32
+    # else:
+    #     torch_dtype = "auto"
+    
+    # model, output_loading_info = AutoModelForVision2Seq.from_pretrained(
+    # # model, output_loading_info = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    #     args.model_path, 
+    #     torch_dtype=torch_dtype, 
+    #     device_map=args.device_map, 
+    #     output_loading_info=True,
+    #     low_cpu_mem_usage=True
+    # )
+    
+    # if args.lora_path =='':
+    #     print("lora设置为不加载！")
+    # else:
+    #     print("加载lora:",args.lora_path)
+    #     model = apply_lora(model, args.lora_path)
+
+
+    print("正在加载模型...")
     processor = AutoProcessor.from_pretrained(args.processor_path)
 
-        # 处理torch_dtype
+    # 处理 torch_dtype
     if args.torch_dtype == "float16":
         torch_dtype = torch.float16
     elif args.torch_dtype == "float32":
         torch_dtype = torch.float32
+    elif args.torch_dtype == "bfloat16":
+        torch_dtype = torch.bfloat16
     else:
         torch_dtype = "auto"
-    
+
     model, output_loading_info = AutoModelForVision2Seq.from_pretrained(
-    # model, output_loading_info = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-        args.model_path, 
-        torch_dtype=torch_dtype, 
-        device_map=args.device_map, 
+        args.model_path,
+        torch_dtype=torch_dtype,
+        device_map=args.device_map,
         output_loading_info=True,
-        low_cpu_mem_usage=True
+        low_cpu_mem_usage=True,
     )
-    
-    if args.lora_path =='':
-        print("lora设置为不加载！")
+    print("加载信息:", output_loading_info)
+
+
+    def load_and_merge_lora(model, lora_path):
+        """加载一个 LoRA 并立即合并进基座模型。"""
+        if not lora_path:
+            raise ValueError("LoRA 路径为空，无法加载")
+        print(f"加载 LoRA: {lora_path}")
+        model = apply_lora(model, lora_path)
+        print(f"合并 LoRA: {lora_path}")
+        model = model.merge_and_unload()
+        return model
+
+
+    # 根据诊断模式决定要加载并合并的 LoRA 列表
+    mode = args.diagnostic_mode
+    lora_paths = []
+
+    if mode == "pvd":
+        # 模式1：只加载 PVD
+        lora_paths = [args.lora_path_PVD]
+
+    elif mode == "avd":
+        # 模式2：PVD -> 合并 -> AVD -> 合并
+        lora_paths = [args.lora_path_PVD, args.lora_path_AVD]
+
+    elif mode == "cmd":
+        # 模式3：PVD -> 合并 -> AVD -> 合并 -> CMD -> 合并
+        lora_paths = [args.lora_path_PVD, args.lora_path_AVD, args.lora_path_CMD]
+
+    elif mode == "":
+        print("诊断模式为空，不加载 LoRA")
     else:
-        print("加载lora:",args.lora_path)
-        model = apply_lora(model, args.lora_path)
+        print(f"未知诊断模式: {mode}，不加载 LoRA")
+
+    # 依次加载并合并
+    for i, lora_path in enumerate(lora_paths):
+        print(f"[{i+1}/{len(lora_paths)}] 处理 LoRA")
+        model = load_and_merge_lora(model, lora_path)
+
     model.eval()  # 设置为评估模式
     
     print("模型加载完成!")
@@ -335,13 +400,16 @@ def main():
         pbar = tqdm(sampled_data, desc="Processing videos", unit="video")
   
         for msg in pbar:
-            video_url = args.data_root + msg["video"][0]
+            try:
+                video_url = args.data_root + msg["video"][0]
+            except Exception:
+                video_url=None
             prompt = msg["conversations"][0]["value"].replace("<video>", "").strip()
             
             try:
 
                 response,prob_y_n = inference(
-                    model, processor, video_url, prompt,args.num_frames
+                    model, processor, prompt,args.num_frames, video_url
                     
                 )
                 result = {

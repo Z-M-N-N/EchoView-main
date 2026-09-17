@@ -36,7 +36,9 @@ Thumbs.db
 *.npy
 MoE/weights/
 **/checkpoints/
-
+**/废弃/
+**/qwen2.5-vl-7b-visual_finetuned/
+**/VLM_TRAIN/lora_output
 # ---------- 输出 / 训练产物 ----------
 outputs/
 **/outputs_*/

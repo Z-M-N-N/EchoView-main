@@ -5,7 +5,7 @@
 TEST_JSON=${3:-"../../Data/dicom_videos_group/Train_Test_JSON2/vcr/test/visual_multi_task.json"}
 # BASE_MODEL=${4:-"../../COMPARE_MODEL/qwen2.5_Model"}
 BASE_MODEL=${4:-"/home/mzhao/公共大模型/Qwen2.5-VL-7B-Instruct"}
-PTH_PATH=${5:-"../../weights_lora/Visual/pth/best_multitask_model.pth"}
+PTH_PATH=${5:-"./pth_fix/best_multitask_model.pth"}
 
 
 
@@ -34,7 +34,7 @@ python predict.py \
     --model_id $BASE_MODEL \
     --checkpoint $PTH_PATH \
     --batch_size 4 --num_frames 16 --num_binary_tasks 28 --num_reg_tasks 7 \
-    --shard_idx 0 --num_shards 0 --save_predictions false \
+    --shard_idx 0 --num_shards 0 --save_predictions false --temporal_pool mean \
     --output_dir pred_output
     # --output_dir pred_output > pred_output/shard${idx}.log 2>&1 &
 

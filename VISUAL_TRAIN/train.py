@@ -13,6 +13,7 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 import gc
+import math
 import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, classification_report
@@ -104,12 +105,13 @@ class MultiTaskTrainerDDP:
         self.rank = rank
         self.is_distributed = is_distributed
         self.gradient_accumulation_steps = gradient_accumulation_steps
+        self._global_step = 0
         
         if is_distributed:
             # 修复：设置 find_unused_parameters=False 以提高性能
             self.model = DDP(self.model, device_ids=[rank], find_unused_parameters=False)
     
-    def train_epoch(self, dataloader, optimizer, criterion):
+    def train_epoch(self, dataloader, optimizer, criterion, scheduler=None):
         self.model.train()
         total_loss = 0
         all_binary_preds = []
@@ -139,6 +141,9 @@ class MultiTaskTrainerDDP:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 optimizer.step()
                 optimizer.zero_grad()
+                self._global_step += 1
+                if scheduler is not None:
+                    scheduler.step()
             
             total_loss += loss.item() * self.gradient_accumulation_steps
             
@@ -160,6 +165,9 @@ class MultiTaskTrainerDDP:
         if (batch_idx + 1) % self.gradient_accumulation_steps != 0:
             optimizer.step()
             optimizer.zero_grad()
+            self._global_step += 1
+            if scheduler is not None:
+                scheduler.step()
         
         avg_loss = total_loss / len(dataloader)
         
@@ -227,7 +235,10 @@ def compute_pos_weights(binary_labels, num_tasks):
 # ============ 分布式训练函数 ============
 def train_multitask_model_distributed(rank, world_size, train_json, model_id,
                                       num_epochs=10, unfreeze_layers=0, weight_output="pth",batch_size=64,
-                                      resume_from=None):
+                                      resume_from=None,
+                                      use_lora=False, lora_r=8, lora_alpha=16, lora_dropout=0.0,
+                                      lora_target='attn', temporal_pool='mean',
+                                      head_lr=1e-4, visual_lr=None, warmup_ratio=0.03):
     """分布式训练主函数"""
     
     setup_distributed(rank, world_size)
@@ -256,7 +267,13 @@ def train_multitask_model_distributed(rank, world_size, train_json, model_id,
         num_binary_tasks=28,  # 注意这里是28
         reg_tasks=7,
         unfreeze_layers=unfreeze_layers,
-        unfreeze_merger=False
+        unfreeze_merger=False,
+        use_lora=use_lora,
+        lora_r=lora_r,
+        lora_alpha=lora_alpha,
+        lora_dropout=lora_dropout,
+        lora_target=lora_target,
+        temporal_pool=temporal_pool
     )
     
     if rank == 0:
@@ -317,31 +334,53 @@ def train_multitask_model_distributed(rank, world_size, train_json, model_id,
         pin_memory=True
     )
     
-    # 优化器
-    optimizer = optim.AdamW(
-        filter(lambda p: p.requires_grad, classifier_model.parameters()),
-        lr=1e-4,
-        weight_decay=1e-5
-    )
-    
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+    # ============ 优化器：分层学习率（视觉编码器小 LR 防破坏预训练特征，头部大 LR） ============
+    if visual_lr is None:
+        visual_lr = 1e-4 if use_lora else 1e-5   # LoRA 适配器可用稍大 LR；全量解冻用小 LR
+    named_params = list(classifier_model.named_parameters())
+    head_grad = [p for n, p in named_params if p.requires_grad and not n.startswith('visual.')]
+    visual_grad = [p for n, p in named_params if p.requires_grad and n.startswith('visual.')]
+    if not visual_grad:
+        raise RuntimeError("没有可训练的视觉参数：请设置 --unfreeze_layers>0 或 --use_lora 1")
+    param_groups = [
+        {'params': head_grad, 'lr': head_lr},
+        {'params': visual_grad, 'lr': visual_lr},
+    ]
+    optimizer = optim.AdamW(param_groups, weight_decay=1e-5)
+    if rank == 0:
+        print(f"⚙️ 优化器：head_lr={head_lr}, visual_lr={visual_lr}，"
+              f"可训练 visual 参数={sum(p.numel() for p in visual_grad):,}，head 参数={sum(p.numel() for p in head_grad):,}")
+
+    # ============ 调度器：warmup + 余弦退火（按 step 更新） ============
+    total_steps = num_epochs * max(1, len(train_loader))
+    warmup_steps = int(warmup_ratio * total_steps)
+
+    def lr_lambda(step):
+        if step < warmup_steps:
+            return max(1e-4, step / max(1, warmup_steps))
+        progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+        return 0.5 * (1 + math.cos(math.pi * progress))
 
     # ============ 续训：从已保存的 best 权重继续（2026-08-25 添加） ============
     start_epoch = 0
     if resume_from:
         ckpt = torch.load(resume_from, map_location=f'cuda:{rank}', weights_only=False)
-        classifier_model.load_state_dict(ckpt['model_state_dict'])
+        # LoRA 模式下 checkpoint 是"已合并"权重（不含 lora_A/lora_B），用 strict=False 恢复：
+        # 基础权重从合并点继续，LoRA 适配器重新从零初始化，等价于"把 LoRA 结果固化后继续训"。
+        classifier_model.load_state_dict(ckpt['model_state_dict'], strict=(not use_lora))
         start_epoch = int(ckpt['epoch']) + 1
-        # ⚠️ 不恢复 optimizer 状态：ckpt 的 optimizer 张量已在 GPU，而此刻参数还在 CPU
-        #   （模型尚未由 trainer 搬到 GPU），直接 load 会 device 不匹配，step() 崩。
-        #   模型权重续训 + 调度器续余弦退火即可，Adam 动量重新累积影响很小。
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=num_epochs, last_epoch=start_epoch - 1
-        )
         if rank == 0:
             print(f"🔄 从 {resume_from} 续训：epoch {start_epoch+1}/{num_epochs}，"
-                  f"上次 val_binary_acc={ckpt.get('val_binary_acc', '?')}（仅恢复模型权重）")
+                  f"上次 val_binary_acc={ckpt.get('val_binary_acc', '?')}" +
+                  ("（LoRA 适配器将重新初始化）" if use_lora else ""))
     # =======================================================================
+
+    scheduler = optim.lr_scheduler.LambdaLR(
+        optimizer, lr_lambda=lr_lambda,
+        last_epoch=(start_epoch * len(train_loader) - 1) if resume_from else -1
+    )
+    if rank == 0:
+        print(f"📉 调度器：warmup_ratio={warmup_ratio}，前 {warmup_steps}/{total_steps} 步线性升温，之后余弦退火")
 
     # ============ 修复：使用正确的任务数量 28 ============
     if rank == 0:
@@ -381,7 +420,7 @@ def train_multitask_model_distributed(rank, world_size, train_json, model_id,
             print(f"{'='*60}")
         
         train_loss, train_binary_acc, train_reg_mae, train_reg_rmse = trainer.train_epoch(
-            train_loader, optimizer, criterion
+            train_loader, optimizer, criterion, scheduler
         )
         
         if rank == 0:
@@ -396,8 +435,6 @@ def train_multitask_model_distributed(rank, world_size, train_json, model_id,
             print(f"Val   - Loss: {val_loss:.4f}, Binary Acc: {val_binary_acc:.4f}, "
                   f"Reg MAE: {val_reg_mae:.4f}, Reg RMSE: {val_reg_rmse:.4f}")
         
-        scheduler.step()
-        
         if rank == 0:
             model_to_save = trainer.model.module if trainer.is_distributed else trainer.model
             
@@ -405,7 +442,7 @@ def train_multitask_model_distributed(rank, world_size, train_json, model_id,
                 best_val_acc = val_binary_acc
                 torch.save({
                     'epoch': epoch,
-                    'model_state_dict': model_to_save.state_dict(),
+                    'model_state_dict': model_to_save.get_merged_state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'val_binary_acc': val_binary_acc,
                     'val_reg_mae': val_reg_mae,
@@ -447,6 +484,15 @@ if __name__ == "__main__":
     parser.add_argument('--base_model', type=str, required=True, help='Qwen2.5-VL模型路径')
     parser.add_argument('--weight_output', type=str, default='./checkpoints', help='模型保存路径')
     parser.add_argument('--resume_from', type=str, default=None, help='从 .pth checkpoint 续训')
+    parser.add_argument('--lr', type=float, default=1e-4, help='分类/回归头部学习率')
+    parser.add_argument('--visual_lr', type=float, default=None, help='视觉编码器(含LoRA)学习率；默认: LoRA=1e-4, 解冻=1e-5')
+    parser.add_argument('--warmup_ratio', type=float, default=0.03, help='warmup 步数占总步数比例')
+    parser.add_argument('--use_lora', type=int, default=0, help='是否对视觉编码器注入LoRA (1=是, 0=否)')
+    parser.add_argument('--lora_r', type=int, default=8, help='LoRA 秩')
+    parser.add_argument('--lora_alpha', type=int, default=16, help='LoRA alpha')
+    parser.add_argument('--lora_dropout', type=float, default=0.0, help='LoRA dropout')
+    parser.add_argument('--lora_target', type=str, default='attn', help="LoRA 目标: attn / mlp / attn+mlp")
+    parser.add_argument('--temporal_pool', type=str, default='mean', help="时序池化: mean / attention")
 
     args = parser.parse_args()
     
@@ -458,6 +504,9 @@ if __name__ == "__main__":
     print(f"  Epochs: {args.num_epochs}")
     print(f"  BATCH_SIZE: {args.batch_size}")
     print(f"  Unfreeze Layers: {args.unfreeze_layers}")
+    print(f"  Use LoRA: {args.use_lora} (r={args.lora_r}, alpha={args.lora_alpha}, target={args.lora_target})")
+    print(f"  Temporal Pool: {args.temporal_pool}")
+    print(f"  head lr={args.lr}, visual lr={args.visual_lr}, warmup_ratio={args.warmup_ratio}")
     print(f"  Model: {args.base_model}")
     print(f"  GPUs: {world_size} (controlled by CUDA_VISIBLE_DEVICES)")
     print("=" * 60)
@@ -469,7 +518,9 @@ if __name__ == "__main__":
     mp.spawn(
         train_multitask_model_distributed,
         args=(world_size, args.train_json, args.base_model,
-              args.num_epochs, args.unfreeze_layers, args.weight_output, args.batch_size,args.resume_from),
+              args.num_epochs, args.unfreeze_layers, args.weight_output, args.batch_size,
+              args.resume_from, args.use_lora, args.lora_r, args.lora_alpha, args.lora_dropout,
+              args.lora_target, args.temporal_pool, args.lr, args.visual_lr, args.warmup_ratio),
         nprocs=world_size,
         join=True
     )

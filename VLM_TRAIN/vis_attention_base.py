@@ -6,7 +6,7 @@ VLM 注意力可视化工具（输入方式不变 + 支持保存图片）
 import os
 
 # ========== 0. GPU 配置（必须在 torch 之前）==========
-cuda_num = 5
+cuda_num = 4
 print(f"Use CUDA: {cuda_num}")
 os.environ["CUDA_VISIBLE_DEVICES"] = f"{cuda_num}"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -622,20 +622,52 @@ msg =   {
     ]
   }
 
+msg={
+    "id": "Dataset/group_5/20240217033452000505695f0c0",
+    "video": [
+      "../../Data/dicom_videos_group/Dataset/group_5/20240217033452000505695f0c0/Doppler_Parasternal_Long.mp4"
+    ],
+    "diag_item": "二尖瓣反流",
+    "mark": 1,
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\n请分析这段心脏超声视频，请根据超声影像特征判断是否存在二尖瓣反流现象。只输出'是'或'否'"
+      },
+      {
+        "from": "gpt",
+        "value": "是"
+      }
+    ]
+  }
 
 
 
+msg=  {
+    "id": "Dataset/group_1/2024042221485800050569525e9",
+    "video": [
+      "../../Data/dicom_videos_group/Dataset/group_1/2024042221485800050569525e9/Doppler_Parasternal_Long.mp4"
+    ],
+    "diag_item": "二尖瓣反流",
+    "mark": -1,
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\n请分析这段心脏超声视频，请根据超声影像特征判断是否存在二尖瓣反流现象。只输出'是'或'否'"
+      },
+      {
+        "from": "gpt",
+        "value": "否"
+      }
+    ]
+  }
 
 
 
 msg["conversations"][0]["value"] = (
-    "<video>\n请查看这段超声视频，并仔细观察二尖瓣的位置是否有二尖瓣反流的特征，"
+    "<video>\n仔细观察二尖瓣的位置是否有二尖瓣反流的特征，如果有，描述其严重程度。"
     "如果有，描述其严重程度。"
 )
-
-
-
-
 
 
 root = ""

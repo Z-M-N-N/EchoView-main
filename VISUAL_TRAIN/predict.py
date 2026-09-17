@@ -68,7 +68,7 @@ from dataset_utils import VideoMultiTaskDataset, get_videos_multilabels
 from vision_multitask_model import VisionMultiTask
 
 
-def load_model(model_id, checkpoint_path, unfreeze_layers=0, device="cuda"):
+def load_model(model_id, checkpoint_path, unfreeze_layers=0, device="cuda", temporal_pool='mean'):
     """加载训练好的多任务模型"""
     print(f"\nLoading Qwen2.5-VL model from {model_id}...")
     base_model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
@@ -85,7 +85,8 @@ def load_model(model_id, checkpoint_path, unfreeze_layers=0, device="cuda"):
         num_binary_tasks=28,
         reg_tasks=7,
         unfreeze_layers=unfreeze_layers,
-        unfreeze_merger=False
+        unfreeze_merger=False,
+        temporal_pool=temporal_pool
     )
     
     # 加载训练好的权重
@@ -521,8 +522,10 @@ def main():
 
     # parser.add_argument('--cuda', type=int, default=0, help='CUDA设备编号')
     parser.add_argument('--batch_size', type=int, default=2, help='批次大小')
-    parser.add_argument('--num_frames', type=int, default=8, help='视频采样帧数')
+    parser.add_argument('--num_frames', type=int, default=16, help='视频采样帧数（需与训练一致，默认16）')
     parser.add_argument('--num_binary_tasks', type=int, default=28, help='二分类任务数量')
+    parser.add_argument('--temporal_pool', type=str, default='mean', choices=['mean', 'attention'],
+                        help='时序池化方式，需与训练时一致 (mean/attention)')
     parser.add_argument('--num_reg_tasks', type=int, default=7, help='回归任务数量')
     parser.add_argument('--unfreeze_layers', type=int, default=0, help='回归任务数量')
     parser.add_argument('--max_batches', type=int, default=None, help='最大评估批次数（None=评估全部）')
@@ -545,6 +548,7 @@ def main():
     print(f"  Model:             {args.model_id}")
     print(f"  Batch Size:        {args.batch_size}")
     print(f"  Num Frames:        {args.num_frames}")
+    print(f"  Temporal Pool:     {args.temporal_pool}")
     print(f"  Binary Tasks:      {args.num_binary_tasks}")
     print(f"  Regression Tasks:  {args.num_reg_tasks}")
     print("="*80)
@@ -597,7 +601,8 @@ def main():
         args.model_id, 
         args.checkpoint, 
         args.unfreeze_layers, 
-        device
+        device,
+        args.temporal_pool
     )
     
     # 评估

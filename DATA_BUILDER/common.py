@@ -41,7 +41,7 @@ def save_json(data, file_path):
 # # 视频文件的根目录，报告中的相对路径与其拼接得到完整视频目录。
 # video_path = "../../Data/dicom_videos_group"
 # 各诊断项配置：prompt（提问）、P/N（阳性/阴性关键词）、primary_views 等。
-diag_info = load_json("/home/mzhao/ECHO_VIEW/EchoView-main/DATA_BUILDER/diag_info.json")
+diag_info = load_json("diag_info.json")
 
     
 # ==================== 报告标签匹配 ====================
@@ -268,6 +268,52 @@ def split_train_test(conv_list, test_size=0.2, random_state=42):
     )
     
     return train_list, test_list
+
+
+def split_train_test_by_folder(convs_by_diag, test_size=0.2, random_state=42):
+    """
+    按患者/文件夹级别切分 train/test，保证同一个 id(患者文件夹) 只出现在一侧。
+    这样就避免同一个患者/同一段视频在多任务(28个诊断)联合训练时同时进入
+    train 和 test，消除跨任务数据泄露。
+
+    Args:
+        convs_by_diag: dict, diag_item -> list of convs(每条含 'id' 字段)
+        test_size: 测试集比例
+        random_state: 随机种子
+
+    Returns:
+        (train_by_diag, test_by_diag): 均为 dict, diag_item -> list of convs
+    """
+    # 1. 收集所有唯一的患者文件夹 id
+    all_folders = set()
+    for conv_list in convs_by_diag.values():
+        for conv in conv_list:
+            all_folders.add(conv['id'])
+    all_folders = sorted(all_folders)
+
+    if len(all_folders) == 0:
+        return {}, {}
+
+    # 2. 只对"患者文件夹集合"做一次随机切分
+    train_folders, test_folders = train_test_split(
+        all_folders,
+        test_size=test_size,
+        random_state=random_state,
+        shuffle=True,
+    )
+    train_set = set(train_folders)
+    test_set = set(test_folders)
+
+    # 3. 按 id 归属将每个诊断的对话划分到 train / test
+    train_by_diag = {}
+    test_by_diag = {}
+    for diag_item, conv_list in convs_by_diag.items():
+        train_by_diag[diag_item] = [c for c in conv_list if c['id'] in train_set]
+        test_by_diag[diag_item]  = [c for c in conv_list if c['id'] in test_set]
+
+    return train_by_diag, test_by_diag
+
+
 
 
 
