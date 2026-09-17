@@ -27,13 +27,13 @@ Three diagnostic experts are trained with progressively expanding view input com
 | Expert | View Input | Description |
 |---|---|---|
 | PVD Expert | Primary-view | Primary views |
-| MCD Expert | Main + Associated | Main and associated views |
+| AVD Expert | Main + Associated | Main and associated views |
 | CMD Expert | Comprehensive | All views |
 
-Corresponding module: `VLM_TRAIN/` (PVD / MCD / CMD LoRA fine-tuning)
+Corresponding module: `VLM_TRAIN/` (PVD / AVD / CMD LoRA fine-tuning)
 
 ### Inference: Task-guided Top-1 Routing
-At inference, a **Top-1 routing module** selects the most appropriate diagnostic mode among the PVD / MCD / CMD experts based on the diagnostic prompt and input echocardiographic videos.
+At inference, a **Top-1 routing module** selects the most appropriate diagnostic mode among the PVD / AVD / CMD experts based on the diagnostic prompt and input echocardiographic videos.
 
 Corresponding modules: `MoE/` (multimodal routing) + `chat_moe.py`
 
@@ -54,9 +54,9 @@ Evaluated on a large real-world clinical dataset (see the paper):
 
 | Directory / File | Description |
 |---|---|
-| `DATA_BUILDER/` | Data construction: build VCR / PVD / MCD / CMD train/test JSON from raw DICOM videos |
+| `DATA_BUILDER/` | Data construction: build VCR / PVD / AVD / CMD train/test JSON from raw DICOM videos |
 | `VISUAL_TRAIN/` | **Stage 1** visual domain adaptation: joint classification + regression multi-task training (Qwen2.5-VL) |
-| `VLM_TRAIN/` | **Stage 2** Progressive Expansion Learning: PVD / MCD / CMD three-expert LoRA fine-tuning (DeepSpeed) |
+| `VLM_TRAIN/` | **Stage 2** Progressive Expansion Learning: PVD / AVD / CMD three-expert LoRA fine-tuning (DeepSpeed) |
 | `MoE/` | **Inference routing**: multimodal MoE routing module (text + multi-view videos, route to the corresponding expert) |
 | `CMP_Model/` | Comparison baseline inference scripts (PanEcho / EchoPrime / Lingshu / Medgemma / HuatuoGPT-Vision / Gemma4 / Qwen2.5-VL / Qwen3-VL) |
 | `chat.py` / `chat_moe.py` | Interactive diagnosis (direct Q&A / MoE routing) |
@@ -111,7 +111,7 @@ pip install -r MoE/requirements.txt
 
 ```bash
 cd DATA_BUILDER
-# Build VCR / PVD / MCD / CMD train/test JSON from the Dataset
+# Build VCR / PVD / AVD / CMD train/test JSON from the Dataset
 bash run_build_all.sh
 ```
 
@@ -130,10 +130,10 @@ bash run_predict.sh
 
 ```bash
 cd VLM_TRAIN
-# Launch LoRA fine-tuning in tmux (configure train_mode=PVD/MCD/CMD, GPU, batch_size via env vars)
+# Launch LoRA fine-tuning in tmux (configure train_mode=PVD/AVD/CMD, GPU, batch_size via env vars)
 bash run_train.sh
 
-# Evaluate (PVD / MCD / CMD)
+# Evaluate (PVD / AVD / CMD)
 bash run_eval.sh
 ```
 

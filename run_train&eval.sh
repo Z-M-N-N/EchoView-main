@@ -84,14 +84,14 @@ bash run_train.sh
 # bash run_eval.sh
 
 
-# #============================MCD============================================
+# #============================AVD============================================
 # export train_mode="avd"                                   # 数据/输出子目录名：only_video
 
 # export GPU_ID="5"                            # GPU ID 列表
 # export GPU_NUM="1"                                   # GPU 数量
 # export diagnostic_mode="avd"
 # export lora_path_PVD="./lora_output/pvd" #设置空则不加载权重
-# export lora_path_MCD="./lora_output/${train_mode}" #设置空则不加载权重
+# export lora_path_AVD="./lora_output/${train_mode}" #设置空则不加载权重
 
 # export test_json_dir="${Data_Path}/Train_Test_JSON/${train_mode}/test"         
 # export result_save_dir="${Data_Path}/Echo-View_Result/${train_mode}"

@@ -83,7 +83,7 @@ tmux send-keys -t "$SESSION_NAME" "
         --model_path \"${llm}\" \
         --diagnostic_mode \"${diagnostic_mode}\" \
         --lora_path_PVD \"${lora_path_PVD}\" \
-        --lora_path_MCD \"${lora_path_MCD}\" \
+        --lora_path_AVD \"${lora_path_AVD}\" \
         --lora_path_CMD \"${lora_path_CMD}\" \
         --data_path \"${test_json_dir}\" \
         --diag_item \"${eval_diag_name}\" \

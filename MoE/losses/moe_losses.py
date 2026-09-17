@@ -45,21 +45,21 @@ class MoELoss(nn.Module):
         return total
 
 
-# ============ 路由任务损失 (3 类路由: PVD/MCD/CMD) ============
+# ============ 路由任务损失 (3 类路由: PVD/AVD/CMD) ============
 
 class RouterCostLoss(nn.Module):
     """路由损失 (论文公式):
         L_router = CE(p_k, r_k^*)                      # 模型选择交叉熵
         L_cost   = p_k^T · [c_pvd, c_mcd, c_cmd]      # 期望视图输入成本
         L_total  = L_router + λ_cost · L_cost
-    成本向量: PVD=1/3, MCD=2/3, CMD=1 (按其视图输入配置归一化).
+    成本向量: PVD=1/3, AVD=2/3, CMD=1 (按其视图输入配置归一化).
     λ_cost 控制"选对模型"与"视图输入效率"的权衡.
     """
 
     def __init__(self, cost_vector: Tuple[float, ...] = (1 / 3, 2 / 3, 1.0),
                  lambda_cost: float = 0.5):
         super().__init__()
-        # 成本向量按类别顺序: 0=PVD, 1=MCD, 2=CMD
+        # 成本向量按类别顺序: 0=PVD, 1=AVD, 2=CMD
         self.register_buffer("cost", torch.tensor(cost_vector, dtype=torch.float32))
         self.lambda_cost = lambda_cost
 
